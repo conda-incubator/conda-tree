@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import asciitree
 import argparse
 import conda.install
 import conda.resolve
