@@ -66,7 +66,7 @@ def main():
         print(e)
 
     elif args.subcmd == 'leafs':
-        e = list(map(lambda i:i[0],(filter(lambda i:i[1]==0,g.in_degree().items()))))
+        e = list(map(lambda i:i[0],(filter(lambda i:i[1]==0,g.in_degree()))))
         print(e)
     else:
         parser.print_help()
