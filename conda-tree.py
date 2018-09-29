@@ -67,6 +67,9 @@ def main():
             [_conda, 'info', '-e', '--json']))
         args.prefix = conda.base.context.locate_prefix_by_name(
             name=args.name, envs_dirs=_info['envs_dirs'])
+
+    if args.prefix is None:
+        args.prefix = sys.prefix
          
     l = get_local_cache(args.prefix)
     g = make_cache_graph(l)
