@@ -3,6 +3,16 @@
 
 conda dependency tree helper
 
+# Install
+
+This helper requires only that `conda-tree.py` be on your path and
+that the `conda` and `networkx` packages are installed.  This can be
+done with `conda` itself if you like:
+
+```bash
+conda install -c mforbes conda-tree
+```
+
 # Usage
 
 ```bash
