@@ -17,7 +17,7 @@ conda install -c mforbes conda-tree
 
 ```bash
 # packages that no other package depends on
-$ ./conda-tree.py leafs
+$ ./conda-tree.py leaves
 ['samtools','bcftools',...]
 
 # dependencies of a specific package
@@ -34,6 +34,10 @@ pip -> python -> pip
 pip -> wheel -> python -> pip
 
 # query a different conda prefix/env
-$ ./conda-tree.py -p /conda/envs/trinity leafs
+$ ./conda-tree.py -p /conda/envs/trinity leaves
+['trinity']
+
+# query by name
+$ ./conda-tree.py -n trinity leaves
 ['trinity']
 ```

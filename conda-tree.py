@@ -47,7 +47,7 @@ def main():
     parser.add_argument('-p','--prefix', default=None)
     parser.add_argument('-n','--name', default=None)
     subparser = parser.add_subparsers(dest='subcmd')
-    subparser.add_parser('leafs', help='shows leaf packages')
+    subparser.add_parser('leaves', help='shows leaf packages')
     subparser.add_parser('cycles', help='shows dependency cycles')
     p = subparser.add_parser('whoneeds', help='shows packages that depends on this package')
     p.add_argument('package', help='the target package')
@@ -86,7 +86,7 @@ def main():
         e = list(map(lambda i: i[0], g.in_edges(args.package)))
         print(e)
 
-    elif args.subcmd == 'leafs':
+    elif args.subcmd in set(['leafs', 'leaves']):
         e = list(map(lambda i:i[0],(filter(lambda i:i[1]==0,g.in_degree()))))
         print(e)
     else:
