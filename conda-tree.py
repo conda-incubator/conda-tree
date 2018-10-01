@@ -1,6 +1,10 @@
 #!/usr/bin/env python
-import sys
 import argparse
+import json
+import os
+import sys
+import subprocess
+
 import conda.install
 import conda.resolve
 import conda.api
@@ -40,9 +44,10 @@ def remove_from_graph(g, node, _cache=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p','--prefix', default=sys.prefix)
+    parser.add_argument('-p','--prefix', default=None)
+    parser.add_argument('-n','--name', default=None)
     subparser = parser.add_subparsers(dest='subcmd')
-    subparser.add_parser('leafs', help='shows leaf packages')
+    subparser.add_parser('leaves', help='shows leaf packages')
     subparser.add_parser('cycles', help='shows dependency cycles')
     p = subparser.add_parser('whoneeds', help='shows packages that depends on this package')
     p.add_argument('package', help='the target package')
@@ -50,6 +55,22 @@ def main():
     p.add_argument('package', help='the target package')
     args = parser.parse_args()
 
+    if args.name is not None:
+        # Allow user to specify name, but check the environment for an
+        # existing CONDA_EXE command.  This allows a different conda
+        # package to be installed (and imported above) but will
+        # resolve the name using their expected conda.  (The imported
+        # conda here will find the environments, but might not name
+        # them as the user expects.)
+        _conda = os.environ.get('CONDA_EXE', 'conda')
+        _info = json.loads(subprocess.check_output(
+            [_conda, 'info', '-e', '--json']))
+        args.prefix = conda.base.context.locate_prefix_by_name(
+            name=args.name, envs_dirs=_info['envs_dirs'])
+
+    if args.prefix is None:
+        args.prefix = sys.prefix
+         
     l = get_local_cache(args.prefix)
     g = make_cache_graph(l)
 
@@ -65,7 +86,7 @@ def main():
         e = list(map(lambda i: i[0], g.in_edges(args.package)))
         print(e)
 
-    elif args.subcmd == 'leafs':
+    elif args.subcmd in set(['leafs', 'leaves']):
         e = list(map(lambda i:i[0],(filter(lambda i:i[1]==0,g.in_degree()))))
         print(e)
     else:
