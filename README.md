@@ -10,7 +10,7 @@ that the `conda` and `networkx` packages are installed.  This can be
 done with `conda` itself if you like:
 
 ```bash
-conda install -c mforbes conda-tree
+conda install -c rvalieris conda-tree
 ```
 
 # Usage
