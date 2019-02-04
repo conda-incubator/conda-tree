@@ -5,13 +5,11 @@ import os
 import sys
 import subprocess
 
-import conda.install
-import conda.resolve
-import conda.api
+import conda.exports
 import networkx
 
 def get_local_cache(prefix):
-    return conda.install.linked_data(prefix=prefix)
+    return conda.exports.linked_data(prefix=prefix)
 
 def get_package_key(cache, package_name):
     ks = list(filter(lambda i: l[i]['name'] == package_name, l))

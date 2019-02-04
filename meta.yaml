@@ -1,10 +1,10 @@
 package:
   name: conda-tree
-  version: "0.0.1"
+  version: "0.0.2"
 
 source:
-  git_url: https://github.com/mforbes/conda-tree.git
-  git_rev: v0.0.1
+  git_url: https://github.com/rvalieris/conda-tree.git
+  git_rev: v0.0.2
 
 requirements:
   host:
@@ -18,8 +18,8 @@ build:
   noarch: python
   script:    # See https://github.com/conda/conda-build/issues/3166
     - mkdir -p "$PREFIX/bin"
-    - cp conda-tree.py "$PREFIX/bin/"
-    
+    - cp conda-tree.py "$PREFIX/bin/conda-tree"
+
 about:
   home: https://github.com/rvalieris/conda-tree
   license: MIT
