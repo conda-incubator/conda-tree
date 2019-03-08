@@ -15,10 +15,15 @@ requirements:
     - conda
 
 build:
-  noarch: python
+  number: 1
+  noarch: generic
   script:    # See https://github.com/conda/conda-build/issues/3166
     - mkdir -p "$PREFIX/bin"
     - cp conda-tree.py "$PREFIX/bin/conda-tree"
+
+test:
+  commands:
+    - conda-tree -h
 
 about:
   home: https://github.com/rvalieris/conda-tree
