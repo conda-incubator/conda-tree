@@ -1,25 +1,29 @@
 package:
   name: conda-tree
-  version: "0.0.2"
+  version: "0.0.3"
 
 source:
   git_url: https://github.com/rvalieris/conda-tree.git
-  git_rev: v0.0.2
+  git_rev: v0.0.3
 
 requirements:
   host:
     - python
+    - pip
+    - setuptools
 
   run:
+    - python
     - networkx
     - conda
 
 build:
-  number: 1
+  number: 0
   noarch: generic
-  script:    # See https://github.com/conda/conda-build/issues/3166
-    - mkdir -p "$PREFIX/bin"
-    - cp conda-tree.py "$PREFIX/bin/conda-tree"
+  script:
+    - "{{ PYTHON }} -m pip install . --no-deps -vv"
+  entry_points:
+    - conda-tree = conda_tree:main
 
 test:
   commands:
