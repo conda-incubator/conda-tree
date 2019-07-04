@@ -9,6 +9,8 @@ import subprocess
 import conda.exports
 import networkx
 
+__version__ = '0.0.4'
+
 def get_local_cache(prefix):
     return conda.exports.linked_data(prefix=prefix)
 
@@ -45,6 +47,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--prefix', default=None)
     parser.add_argument('-n','--name', default=None)
+    parser.add_argument('-v','--version', action='version', version='%(prog)s '+__version__)
     parser.add_argument('-r','--recursive', help='show dependencies of dependencies',default=False, action='store_true')
     subparser = parser.add_subparsers(dest='subcmd')
     subparser.add_parser('leaves', help='shows leaf packages')
