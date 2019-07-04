@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function
 import argparse
 import json
 import os
@@ -7,6 +8,8 @@ import subprocess
 
 import conda.exports
 import networkx
+
+__version__ = '0.0.4'
 
 def get_local_cache(prefix):
     return conda.exports.linked_data(prefix=prefix)
@@ -44,6 +47,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--prefix', default=None)
     parser.add_argument('-n','--name', default=None)
+    parser.add_argument('-v','--version', action='version', version='%(prog)s '+__version__)
+    parser.add_argument('-r','--recursive', help='show dependencies of dependencies',default=False, action='store_true')
     subparser = parser.add_subparsers(dest='subcmd')
     subparser.add_parser('leaves', help='shows leaf packages')
     subparser.add_parser('cycles', help='shows dependency cycles')
@@ -77,14 +82,24 @@ def main():
             print(" -> ".join(i)+" -> "+i[0])
 
     elif args.subcmd == 'depends':
-        e = list(map(lambda i: i[1], g.out_edges(args.package)))
+        if args.package not in g:
+            print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
+        if args.recursive:
+            e = list(networkx.descendants(g, args.package))
+        else:
+            e = list(map(lambda i: i[1], g.out_edges(args.package)))
         print(e)
 
     elif args.subcmd == 'whoneeds':
-        e = list(map(lambda i: i[0], g.in_edges(args.package)))
+        if args.package not in g:
+            print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
+        if args.recursive:
+            e = list(networkx.ancestors(g, args.package))
+        else:
+            e = list(map(lambda i: i[0], g.in_edges(args.package)))
         print(e)
 
-    elif args.subcmd in set(['leafs', 'leaves']):
+    elif args.subcmd == 'leaves':
         e = list(map(lambda i:i[0],(filter(lambda i:i[1]==0,g.in_degree()))))
         print(e)
     else:
