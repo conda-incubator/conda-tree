@@ -17,27 +17,27 @@ conda install -c conda-forge conda-tree
 
 ```bash
 # packages that no other package depends on
-$ ./conda-tree.py leaves
+$ conda-tree leaves
 ['samtools','bcftools',...]
 
 # dependencies of a specific package
-$ ./conda-tree.py depends samtools
+$ conda-tree depends samtools
 ['curl', 'xz', 'libgcc', 'zlib']
 
 # which packages depend on a specific package
-$ ./conda-tree.py whoneeds xz
+$ conda-tree whoneeds xz
 ['samtools', 'bcftools', 'htslib', 'python']
 
 # dependency cycles
-$ ./conda-tree.py cycles
+$ conda-tree cycles
 pip -> python -> pip
 pip -> wheel -> python -> pip
 
 # query a different conda prefix/env
-$ ./conda-tree.py -p /conda/envs/trinity leaves
+$ conda-tree -p /conda/envs/trinity leaves
 ['trinity']
 
 # query by name
-$ ./conda-tree.py -n trinity leaves
+$ conda-tree -n trinity leaves
 ['trinity']
 ```
