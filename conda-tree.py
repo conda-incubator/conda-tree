@@ -47,18 +47,19 @@ def remove_from_graph(g, node, _cache=None):
 	if node in g: g.remove_node(node)
 	return(g)
 
-def print_dependencies(g, pkg, parent, indent, args, treated):
+def print_dependencies(g, pkg, parent, indent, args, treated, down_search):
 	s = "" # String to print
 	v = g.nodes[pkg]['version']
-	out_edges = g.out_edges(pkg)
-	e = [i[1] for i in out_edges]
+	edges = g.out_edges(pkg) if down_search else g.in_edges(pkg)
+	e = [i[1] for i in edges] if down_search else [i[0] for i in edges]
 	# Removing python to avoid cycles
 	if "python" in e: e.remove("python")
 	if args.no_conda and "conda" in e: e.remove("conda")
 	if indent == 0:
 		s += f"{pkg}=={v}\n"
 	else:
-		r = ', '.join(g.edges[parent, pkg]['version'])
+		r = (', '.join(g.edges[parent, pkg]['version']) if down_search
+		     else ', '.join(g.edges[pkg, parent]['version']))
 		r = 'Any' if r == '' else r
 		i_str = '  ' * indent
 		s += f"{i_str}- {pkg} [required: {r}, installed: {v}]\n"
@@ -68,7 +69,8 @@ def print_dependencies(g, pkg, parent, indent, args, treated):
 		else:
 			if len(e) > 0: treated.add(pkg)
 	for pack in e: 
-		tree_str, treat = print_dependencies(g, pack, pkg, indent+1, args, treated)
+		tree_str, treat = print_dependencies(
+			g, pack, pkg, indent+1, args, treated, down_search)
 		s += tree_str
 		for pkg_name in treat: treated.add(pkg_name)
 	return s, treated
@@ -135,7 +137,8 @@ def main():
 			print(e)
 		elif args.tree:
 			if networkx.is_directed_acyclic_graph(g):
-				tree, _ = print_dependencies(g, args.package, None, 0, args, set())
+				tree, _ = print_dependencies(
+					g, args.package, None, 0, args, set(), True)
 				print(tree)
 		else:
 			e = list(map(lambda i: i[1], g.out_edges(args.package)))
@@ -146,9 +149,15 @@ def main():
 			print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
 		if args.recursive:
 			e = list(networkx.ancestors(g, args.package))
+			print(e)
+		elif args.tree:
+			if networkx.is_directed_acyclic_graph(g):
+				tree, _ = print_dependencies(
+					g, args.package, None, 0, args, set(), False)
+				print(tree)
 		else:
 			e = list(map(lambda i: i[0], g.in_edges(args.package)))
-		print(e)
+			print(e)
 
 	elif args.subcmd == 'leaves':
 		print(get_leaves(g))
