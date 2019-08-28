@@ -47,7 +47,7 @@ def remove_from_graph(g, node, _cache=None):
 	if node in g: g.remove_node(node)
 	return(g)
 
-def print_dependencies(g, pkg, parent, indent, args, treated, down_search):
+def print_dependencies(g, pkg, parent, indent, args, processed, down_search):
 	s = "" # String to print
 	v = g.nodes[pkg]['version']
 	edges = g.out_edges(pkg) if down_search else g.in_edges(pkg)
@@ -59,21 +59,21 @@ def print_dependencies(g, pkg, parent, indent, args, treated, down_search):
 		s += f"{pkg}=={v}\n"
 	else:
 		r = (', '.join(g.edges[parent, pkg]['version']) if down_search
-		     else ', '.join(g.edges[pkg, parent]['version']))
+			 else ', '.join(g.edges[pkg, parent]['version']))
 		r = 'Any' if r == '' else r
 		i_str = '  ' * indent
 		s += f"{i_str}- {pkg} [required: {r}, installed: {v}]\n"
-		if pkg in treated and not args.full:
+		if pkg in processed and not args.full:
 			s += f"{i_str}  ... (already above)\n"
-			return s, treated
+			return s, processed
 		else:
-			if len(e) > 0: treated.add(pkg)
+			if len(e) > 0: processed.add(pkg)
 	for pack in e: 
 		tree_str, treat = print_dependencies(
-			g, pack, pkg, indent+1, args, treated, down_search)
+			g, pack, pkg, indent+1, args, processed, down_search)
 		s += tree_str
-		for pkg_name in treat: treated.add(pkg_name)
-	return s, treated
+		for pkg_name in treat: processed.add(pkg_name)
+	return s, processed
 
 def main():
 	parser = argparse.ArgumentParser()
@@ -82,23 +82,49 @@ def main():
 	parser.add_argument('-v','--version', action='version', version='%(prog)s '+__version__)
 
 	subparser = parser.add_subparsers(dest='subcmd')
-	subparser.add_parser('leaves', help='shows leaf packages')
-	subparser.add_parser('cycles', help='shows dependency cycles')
 
+	# Arguments for "package_cmds" commands
+	# Subcommands that deal with the dependencies of packages
 	package_cmds = argparse.ArgumentParser(add_help=False)
 	package_cmds.add_argument('package', help='the target package')
 
+	# Arguments for "rec_or_tree" commands
+	# Subcommands that can yield direct dependencies, recursive dependencies, or a tree view
 	rec_or_tree = package_cmds.add_mutually_exclusive_group(required=False)
-	rec_or_tree.add_argument('-t', '--tree', help='show dependencies of dependencies in tree form, ignores python as a dependency to avoid cycles', default=False, action="store_true")
-	rec_or_tree.add_argument('-r','--recursive', help='show dependencies of dependencies',default=False, action='store_true')
+	rec_or_tree.add_argument('-t', '--tree', 
+		help=('show dependencies of dependencies in tree form, ' +
+			  'ignores python as a dependency to avoid cycles'), 
+		default=False, action="store_true")
+	rec_or_tree.add_argument('-r','--recursive', 
+		help='show dependencies of dependencies',
+		default=False, action='store_true')
 
+	# Arguments for "hiding" commands
+	# Subcommands that enable users to hide a part of the result
 	hiding_cmds = argparse.ArgumentParser(add_help=False)
-	hiding_cmds.add_argument('--no-conda', help='does not show dependencies of conda to make the tree easier to understand', default=False, action='store_true')
-	hiding_cmds.add_argument('--full', help='shows the complete dependency tree, with all the repetitions that it entails', default=False, action='store_true')
+	hiding_cmds.add_argument('--no-conda', 
+		help=('does not show dependencies of conda' +
+			  'to make the tree easier to understand'), 
+		default=False, action='store_true')
+	hiding_cmds.add_argument('--full', 
+		help=('shows the complete dependency tree,' +
+			  'with all the repetitions that it entails'), 
+		default=False, action='store_true')
 
-	subparser.add_parser('whoneeds', help='shows packages that depends on this package', parents=[package_cmds, hiding_cmds])
-	subparser.add_parser('depends', help='shows this package dependencies', parents=[package_cmds, hiding_cmds])
-	subparser.add_parser('deptree', help="shows the complete dependency tree ('python' is excluded to avoid cycles)", parents=[hiding_cmds])
+	# Definining the simple subcommands
+	subparser.add_parser('leaves', help='shows leaf packages')
+	subparser.add_parser('cycles', help='shows dependency cycles')
+
+	# Defining the complex subcommands
+	subparser.add_parser('whoneeds', 
+		help='shows packages that depends on this package', 
+		parents=[package_cmds, hiding_cmds])
+	subparser.add_parser('depends', 
+		help='shows this package dependencies',
+		parents=[package_cmds, hiding_cmds])
+	subparser.add_parser('deptree',
+		help="shows the complete dependency tree ('python' is excluded to avoid cycles)",
+		parents=[hiding_cmds])
 
 	args = parser.parse_args()
 
@@ -119,54 +145,60 @@ def main():
 		args.prefix = sys.prefix
 		 
 	l = get_local_cache(args.prefix)
-	no_python = True if (args.subcmd == "deptree" or args.tree) else False
+	# To know when we have to hide python from the dependency graph
+	# In other words, when do we need to have a graph that is not
+	# cyclical?
+	no_python = True if (args.subcmd not in ["cycles", "leaves"] 
+						 and args.tree) else False
 	g = make_cache_graph(l, no_python)
 
+	######
+	# Helper functions for subcommands
+	######
 	def get_leaves(graph):
 		return list(map(lambda i:i[0],(filter(lambda i:i[1]==0,graph.in_degree()))))
 
+	def get_cycles(graph):
+		s = ""
+		for i in networkx.simple_cycles(graph):
+			s += " -> ".join(i)+" -> "+i[0] + "\n"
+		return s
+
 	if args.subcmd == 'cycles':
-		for i in networkx.simple_cycles(g):
-			print(" -> ".join(i)+" -> "+i[0])
+		print(get_cycles(g), end='')
 
-	elif args.subcmd == 'depends':
+	elif args.subcmd in ['depends', 'whoneeds']:
+		# This variable defines whether we are searching down the dependency
+		# tree, or if rather we are looking for which packages depend on the 
+		# package, which would be searching up.
+		# The 'depends' subcommand corresponds to a down search.
+		down_search = (args.subcmd == "depends")
 		if args.package not in g:
 			print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
 		if args.recursive:
-			e = list(networkx.descendants(g, args.package))
+			fn = networkx.descendants if down_search else networkx.ancestors
+			e = list(fn(g, args.package))
 			print(e)
 		elif args.tree:
 			if networkx.is_directed_acyclic_graph(g):
 				tree, _ = print_dependencies(
-					g, args.package, None, 0, args, set(), True)
+					g, args.package, None, 0, args, set(), down_search)
 				print(tree)
+			else: 
+				print("Error: The dependency graph is cyclical.")
 		else:
-			e = list(map(lambda i: i[1], g.out_edges(args.package)))
-			print(e)
-
-	elif args.subcmd == 'whoneeds':
-		if args.package not in g:
-			print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
-		if args.recursive:
-			e = list(networkx.ancestors(g, args.package))
-			print(e)
-		elif args.tree:
-			if networkx.is_directed_acyclic_graph(g):
-				tree, _ = print_dependencies(
-					g, args.package, None, 0, args, set(), False)
-				print(tree)
-		else:
-			e = list(map(lambda i: i[0], g.in_edges(args.package)))
+			fn = g.out_edges if down_search else g.in_edges
+			e = list(map(lambda i: i[1], fn(args.package)))
 			print(e)
 
 	elif args.subcmd == 'leaves':
 		print(get_leaves(g))
 
 	elif args.subcmd == 'deptree':
-		treated = set()
-		complete_tree = ""
+		processed, complete_tree = set(), ""
 		for pk in get_leaves(g):
-			tree, treated = print_dependencies(g, pk, None, 0, args, treated)
+			tree, processed = print_dependencies(
+				g, pk, None, 0, args, processed, True)
 			complete_tree += tree
 		print(''.join(complete_tree))
 	else:
