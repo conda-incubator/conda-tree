@@ -229,8 +229,8 @@ def main():
             else: 
                 print("Error: The dependency graph is cyclical.")
         else:
-            fn = g.out_edges if state["down_search"] else g.in_edges
-            e = list(map(lambda i: i[1] if state["down_search"] else i[0], fn(args.package)))
+            edges = g.out_edges(args.package) if down_search else g.in_edges(args.package)
+            e = [i[1] for i in edges] if down_search else [i[0] for i in edges]
             print(e)
 
     elif args.subcmd == 'leaves':
