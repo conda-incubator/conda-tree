@@ -11,6 +11,10 @@ import networkx
 
 __version__ = '0.0.5'
 
+# The number of spaces 
+INIT_TABSIZE = 3
+TABSIZE = 3
+
 class ansi:
     ENDC = '\033[0m'
     DIM = '\033[2m'
@@ -69,7 +73,9 @@ def print_dep_tree(g, pkg, prev, state):
     # Removing python to avoid cycles, or conda if asked to
     if "python" in e: e.remove("python")
     if args.no_conda and "conda" in e: e.remove("conda")
-    will_create_subtree = True if len(e) >= 1 else False
+    dependencies_to_hide = (True 
+        if pkg in state["tree_exists"] and not args.full else False)
+    will_create_subtree = (True if len(e) >= 1 else False)
 
     # If the package is a leaf
     if indent == 0:
@@ -82,19 +88,22 @@ def print_dep_tree(g, pkg, prev, state):
             if down_search else ', '.join(g.edges[pkg, prev]['version']))
         r = 'any' if requirement == '' else requirement
         # Preparing the prepend string
-        br = '└─' if is_last else '├─'
+        br = ('└─' if is_last else '├─') 
+        # Optional: + ('┬' if will_create_subtree else '─')
         i = ""
         for x in range(indent):
-            if x in empty_cols or x == 0:
-                i += ' ' * 3
+            if x == 0:
+                i += ' ' * 2
+            elif x in empty_cols:
+                i += ' ' * TABSIZE
             else: 
-                i += ('│' + (' ' * 2))
+                i += ('│' + (' ' * (TABSIZE - 1)))
         s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
-        if pkg in state["tree_exists"] and not args.full:
+        if dependencies_to_hide:
             state["hidden_dependencies"] = True
             br2 = ' ' if is_last else '│'
             word = "dependencies" if down_search else "dependent packages"
-            s += f"{i}{br2}  {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
+            s += f"{i}{br2} {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
             will_create_subtree = False
         else:
             if len(e) > 0: state["tree_exists"].add(pkg)
