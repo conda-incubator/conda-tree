@@ -11,6 +11,10 @@ import networkx
 
 __version__ = '0.0.5'
 
+class col:
+    ENDC = '\033[0m'
+    DIM = '\033[2m'
+
 def get_local_cache(prefix):
     return conda.exports.linked_data(prefix=prefix)
 
@@ -47,33 +51,68 @@ def remove_from_graph(g, node, _cache=None):
     if node in g: g.remove_node(node)
     return(g)
 
-def print_dependencies(g, pkg, parent, indent, args, processed, down_search):
-    s = "" # String to print
-    v = g.nodes[pkg]['version']
+def print_dep_tree(g, pkg, prev, state):
+    # Unpack the state data
+    down_search, args = state["down_search"], state["args"]
+    indent = state["indent"]
+    empty_cols, is_last = state["empty_cols"], state["is_last"]
+    tree_exists = state["tree_exists"]
+
+    s = ""                      # String to print
+    v = g.nodes[pkg]['version'] # Version of package
+
+
+    # Create list of edges
     edges = g.out_edges(pkg) if down_search else g.in_edges(pkg)
     e = [i[1] for i in edges] if down_search else [i[0] for i in edges]
-    # Removing python to avoid cycles
+    
+    # Removing python to avoid cycles, or conda if asked to
     if "python" in e: e.remove("python")
     if args.no_conda and "conda" in e: e.remove("conda")
+    will_create_subtree = True if len(e) >= 1 else False
+
+    # If the package is a leaf
     if indent == 0:
         s += f"{pkg}=={v}\n"
+    # Let's print the branch
     else:
-        r = (', '.join(g.edges[parent, pkg]['version']) if down_search
-             else ', '.join(g.edges[pkg, parent]['version']))
-        r = 'Any' if r == '' else r
-        i_str = '  ' * indent
-        s += f"{i_str}- {pkg} [required: {r}, installed: {v}]\n"
-        if pkg in processed and not args.full:
-            s += f"{i_str}  ... (already above)\n"
-            return s, processed
+        # Finding requirements for package from the parent 
+        # (or child, if we are running the 'whoneeds' subcommand)
+        requirement = (', '.join(g.edges[prev, pkg]['version']) 
+            if down_search else ', '.join(g.edges[pkg, prev]['version']))
+        r = 'any' if requirement == '' else requirement
+        # Preparing the prepend string
+        br = '└─' if is_last else '├─'
+        i = ""
+        for x in range(indent):
+            if x in empty_cols or x == 0:
+                i += ' ' * 3
+            else: 
+                i += ('│' + (' ' * 2))
+        s += f"{i}{br} {pkg}{col.DIM} {v} [required: {r}]{col.ENDC}\n"
+        if pkg in state["tree_exists"] and not args.full:
+            br2 = ' ' if is_last else '│'
+            word = "dependencies" if down_search else "dependent packages"
+            s += f"{i}{br2}  {col.DIM}└─ {word} of {pkg} printed above{col.ENDC}\n"
+            will_create_subtree = False
         else:
-            if len(e) > 0: processed.add(pkg)
-    for pack in e: 
-        tree_str, treat = print_dependencies(
-            g, pack, pkg, indent+1, args, processed, down_search)
-        s += tree_str
-        for pkg_name in treat: processed.add(pkg_name)
-    return s, processed
+            if len(e) > 0: state["tree_exists"].add(pkg)
+
+    # Print the children
+    if will_create_subtree:
+        state["indent"] += 1
+        for pack in e: 
+            if state["is_last"]: state["empty_cols"].append(indent)
+            state["is_last"] = False if e[-1] != pack else True
+            tree_str, state = print_dep_tree(g, pack, pkg, state)
+            s += tree_str
+    # If this is the last of its subtree to be printed
+    if is_last and indent != 0:
+        state["indent"] -= 1
+        if indent in empty_cols: state["empty_cols"].remove(indent)
+        state["is_last"] = False
+    return s, state
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -164,6 +203,10 @@ def main():
             s += " -> ".join(i)+" -> "+i[0] + "\n"
         return s
 
+    # Default state for the recursive tree function
+    state = {'down_search': True, 'args': args, 'indent': 0, 'indent': 0,
+             'empty_cols': [], 'is_last': False, 'tree_exists': set(),}
+
     if args.subcmd == 'cycles':
         print(get_cycles(g), end='')
 
@@ -172,38 +215,45 @@ def main():
         # tree, or if rather we are looking for which packages depend on the 
         # package, which would be searching up.
         # The 'depends' subcommand corresponds to a down search.
-        down_search = (args.subcmd == "depends")
+        state["down_search"] = (args.subcmd == "depends")
         if args.package not in g:
             print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
         if args.recursive:
-            fn = networkx.descendants if down_search else networkx.ancestors
+            fn = networkx.descendants if state["down_search"] else networkx.ancestors
             e = list(fn(g, args.package))
             print(e)
         elif args.tree:
             if networkx.is_directed_acyclic_graph(g):
-                tree, _ = print_dependencies(
-                    g, args.package, None, 0, args, set(), down_search)
-                print(tree)
+                tree, _ = print_dep_tree(g, args.package, None, state)
+                print(tree, end='')
             else: 
                 print("Error: The dependency graph is cyclical.")
         else:
-            fn = g.out_edges if down_search else g.in_edges
-            e = list(map(lambda i: i[1] if down_search else i[0], fn(args.package)))
+            fn = g.out_edges if state["down_search"] else g.in_edges
+            e = list(map(lambda i: i[1] if state["down_search"] else i[0], fn(args.package)))
             print(e)
 
     elif args.subcmd == 'leaves':
         print(get_leaves(g))
 
     elif args.subcmd == 'deptree':
-        processed, complete_tree = set(), ""
+        complete_tree = ""
         for pk in get_leaves(g):
-            tree, processed = print_dependencies(
-                g, pk, None, 0, args, processed, True)
+            tree, state = print_dep_tree(g, pk, None, state)
             complete_tree += tree
-        print(''.join(complete_tree))
+        print(''.join(complete_tree), end='')
     else:
         parser.print_help()
         sys.exit(1)
+
+    #######
+    # Warning messages
+    #######
+
+    # If we use a tree-based command without --full enabled
+    if hasattr(args, "full") and not args.full and no_python:
+        print(f"\n{col.DIM}For the sake of clarity, some redundancies may have been hidden.\n" +
+              f"Please use the '--full' option to display them anyway.{col.ENDC}")
 
 if __name__ == "__main__":
     main()
