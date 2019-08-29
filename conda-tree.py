@@ -11,7 +11,7 @@ import networkx
 
 __version__ = '0.0.5'
 
-class col:
+class ansi:
     ENDC = '\033[0m'
     DIM = '\033[2m'
 
@@ -89,11 +89,12 @@ def print_dep_tree(g, pkg, prev, state):
                 i += ' ' * 3
             else: 
                 i += ('│' + (' ' * 2))
-        s += f"{i}{br} {pkg}{col.DIM} {v} [required: {r}]{col.ENDC}\n"
+        s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
         if pkg in state["tree_exists"] and not args.full:
+            state["hidden_dependencies"] = True
             br2 = ' ' if is_last else '│'
             word = "dependencies" if down_search else "dependent packages"
-            s += f"{i}{br2}  {col.DIM}└─ {word} of {pkg} printed above{col.ENDC}\n"
+            s += f"{i}{br2}  {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
             will_create_subtree = False
         else:
             if len(e) > 0: state["tree_exists"].add(pkg)
@@ -205,7 +206,8 @@ def main():
 
     # Default state for the recursive tree function
     state = {'down_search': True, 'args': args, 'indent': 0, 'indent': 0,
-             'empty_cols': [], 'is_last': False, 'tree_exists': set(),}
+             'empty_cols': [], 'is_last': False, 'tree_exists': set(),
+             'hidden_dependencies': False}
 
     if args.subcmd == 'cycles':
         print(get_cycles(g), end='')
@@ -218,19 +220,23 @@ def main():
         state["down_search"] = (args.subcmd == "depends")
         if args.package not in g:
             print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
+            sys.exit(1)
         if args.recursive:
             fn = networkx.descendants if state["down_search"] else networkx.ancestors
             e = list(fn(g, args.package))
             print(e)
         elif args.tree:
+            if args.package == "python":
+                print("warning: because it creates cyclical dependencies, python is removed from tree views.")
+                sys.exit(1)
             if networkx.is_directed_acyclic_graph(g):
-                tree, _ = print_dep_tree(g, args.package, None, state)
+                tree, state = print_dep_tree(g, args.package, None, state)
                 print(tree, end='')
             else: 
                 print("Error: The dependency graph is cyclical.")
         else:
-            edges = g.out_edges(args.package) if down_search else g.in_edges(args.package)
-            e = [i[1] for i in edges] if down_search else [i[0] for i in edges]
+            edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
+            e = [i[1] for i in edges] if state["down_search"] else [i[0] for i in edges]
             print(e)
 
     elif args.subcmd == 'leaves':
@@ -242,6 +248,7 @@ def main():
             tree, state = print_dep_tree(g, pk, None, state)
             complete_tree += tree
         print(''.join(complete_tree), end='')
+
     else:
         parser.print_help()
         sys.exit(1)
@@ -251,9 +258,9 @@ def main():
     #######
 
     # If we use a tree-based command without --full enabled
-    if hasattr(args, "full") and not args.full and no_python:
-        print(f"\n{col.DIM}For the sake of clarity, some redundancies may have been hidden.\n" +
-              f"Please use the '--full' option to display them anyway.{col.ENDC}")
+    if state["hidden_dependencies"]:
+        print(f"\n{ansi.DIM}For the sake of clarity, some redundancies have been hidden.\n" +
+              f"Please use the '--full' option to display them anyway.{ansi.ENDC}")
 
 if __name__ == "__main__":
     main()
