@@ -148,8 +148,8 @@ def main():
     # To know when we have to hide python from the dependency graph
     # In other words, when do we need to have a graph that is not
     # cyclical?
-    no_python = True if (args.subcmd not in ["cycles", "leaves"] 
-                         and args.tree) else False
+    no_python = True if (args.subcmd == "deptree" or
+                        (hasattr(args, "tree") and args.tree)) else False
     g = make_cache_graph(l, no_python)
 
     ######
