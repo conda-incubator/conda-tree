@@ -188,7 +188,7 @@ def main():
                 print("Error: The dependency graph is cyclical.")
         else:
             fn = g.out_edges if down_search else g.in_edges
-            e = list(map(lambda i: i[1], fn(args.package)))
+            e = list(map(lambda i: i[1] if down_search else i[0], fn(args.package)))
             print(e)
 
     elif args.subcmd == 'leaves':
