@@ -26,13 +26,11 @@ def get_package_key(cache, package_name):
     ks = list(filter(lambda i: l[i]['name'] == package_name, l))
     return ks[0]
 
-def make_cache_graph(cache, no_python):
+def make_cache_graph(cache):
     g = networkx.DiGraph()
     for k in cache.keys():
         n = cache[k]['name']
         v = cache[k]['version']
-        # Removing python to avoid cycles (--tree option)
-        if no_python and n == "python": continue
         g.add_node(n, version=v)
         for j in cache[k]['depends']:
             n2 = j.split(' ')[0]
@@ -65,16 +63,24 @@ def print_dep_tree(g, pkg, prev, state):
     s = ""                      # String to print
     v = g.nodes[pkg]['version'] # Version of package
 
+    full_tree = True if ((hasattr(args, "full") and args.full)) else False
 
     # Create list of edges
     edges = g.out_edges(pkg) if down_search else g.in_edges(pkg)
     e = [i[1] for i in edges] if down_search else [i[0] for i in edges]
-    
-    # Removing python to avoid cycles, or conda if asked to
-    if "python" in e: e.remove("python")
-    if args.no_conda and "conda" in e: e.remove("conda")
-    dependencies_to_hide = (True 
-        if pkg in state["tree_exists"] and not args.full else False)
+    # Maybe?: Sort edges in alphabetical order
+    # e = sorted(e, key=(lambda i: i[1] if down_search else i[0]))
+
+    if args.small: 
+        if "conda" in e: state["tree_exists"].add("conda")
+        if "python" in e: state["tree_exists"].add("python")
+
+    dependencies_to_hide = (True # We hide dependencies if...
+        if ((pkg in state["tree_exists"] and not args.full)
+            # Package already displayed and '--full' not used.
+            or (args.full and pkg in state["tree_exists"] and pkg == "python")) 
+            # or, if '--full' is used, a special case for python.
+        else False)
     will_create_subtree = (True if len(e) >= 1 else False)
 
     # If the package is a leaf
@@ -101,10 +107,17 @@ def print_dep_tree(g, pkg, prev, state):
         s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
         if dependencies_to_hide:
             state["hidden_dependencies"] = True
-            br2 = ' ' if is_last else '│'
-            word = "dependencies" if down_search else "dependent packages"
-            s += f"{i}{br2} {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
             will_create_subtree = False
+            # We do not print these lines if:
+            # python dependencies with '--full' on
+            # for python and conda dependencies if '-small' on
+            if ((pkg == "python" and args.full)
+                or (pkg in ["python", "conda"] and args.small)):
+                pass
+            else:
+                br2 = ' ' if is_last else '│'
+                word = "dependencies" if down_search else "dependent packages"
+                s += f"{i}{br2}  {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
         else:
             if len(e) > 0: state["tree_exists"].add(pkg)
 
@@ -151,13 +164,14 @@ def main():
     # Arguments for "hiding" commands
     # Subcommands that enable users to hide a part of the result
     hiding_cmds = argparse.ArgumentParser(add_help=False)
-    hiding_cmds.add_argument('--no-conda', 
-        help=('does not show dependencies of conda' +
+    hiding_args = hiding_cmds.add_mutually_exclusive_group(required=False)
+    hiding_args.add_argument('--small', 
+        help=('does not show dependencies of conda or python' +
               'to make the tree easier to understand'), 
         default=False, action='store_true')
-    hiding_cmds.add_argument('--full', 
+    hiding_args.add_argument('--full', 
         help=('shows the complete dependency tree,' +
-              'with all the repetitions that it entails'), 
+              'with all the redundancies that it entails'), 
         default=False, action='store_true')
 
     # Definining the simple subcommands
@@ -197,9 +211,7 @@ def main():
     # To know when we have to hide python from the dependency graph
     # In other words, when do we need to have a graph that is not
     # cyclical?
-    no_python = True if (args.subcmd == "deptree" or
-                        (hasattr(args, "tree") and args.tree)) else False
-    g = make_cache_graph(l, no_python)
+    g = make_cache_graph(l)
 
     ######
     # Helper functions for subcommands
@@ -235,14 +247,11 @@ def main():
             e = list(fn(g, args.package))
             print(e)
         elif args.tree:
-            if args.package == "python":
-                print("warning: because it creates cyclical dependencies, python is removed from tree views.")
+            if args.package == "python" and args.full:
+                print("'python' does not have full tree views, as it has cyclical dependencies.")
                 sys.exit(1)
-            if networkx.is_directed_acyclic_graph(g):
-                tree, state = print_dep_tree(g, args.package, None, state)
-                print(tree, end='')
-            else: 
-                print("Error: The dependency graph is cyclical.")
+            tree, state = print_dep_tree(g, args.package, None, state)
+            print(tree, end='')
         else:
             edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
             e = [i[1] for i in edges] if state["down_search"] else [i[0] for i in edges]
@@ -267,9 +276,17 @@ def main():
     #######
 
     # If we use a tree-based command without --full enabled
-    if state["hidden_dependencies"]:
+    if state["hidden_dependencies"] and not args.full:
         print(f"\n{ansi.DIM}For the sake of clarity, some redundancies have been hidden.\n" +
               f"Please use the '--full' option to display them anyway.{ansi.ENDC}")
+        if not args.small:
+            print(f"\n{ansi.DIM}If you are tired of seeing 'conda' and 'python' everywhere,\n" +
+              f"you can use the '--small' option to hide their dependencies completely.{ansi.ENDC}")
+
+    # If we use a tree-based command without --full enabled
+    if state["hidden_dependencies"] and args.full:
+        print(f"\n{ansi.DIM}The full dependency tree shows dependencies of python only once.\n" +
+              f"There is no way around this because of dependency cycles.{ansi.ENDC}")
 
 if __name__ == "__main__":
     main()
