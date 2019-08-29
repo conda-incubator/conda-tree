@@ -24,15 +24,16 @@ $ conda-tree leaves
 $ conda-tree depends samtools
 ['curl', 'xz', 'libgcc', 'zlib']
 
-# dependencies in a tree form
-$ conda-tree depends sqlite
+# dependencies in a tree form 
+# (redundancies are hidden by default)
+$ conda-tree depends -t sqlite
 sqlite==3.29.0
-  - ncurses [required: >=6.1,<6.2.0a0, installed: 6.1]
-    - libcxx [required: >=4.0.1, installed: 8.0.1]
-      - libcxxabi [required: 8.0.1, 0, installed: 8.0.1]
-  - readline [required: >=8.0,<9.0a0, installed: 8.0]
-    - ncurses [required: >=6.1,<6.2.0a0, installed: 6.1]
-      ... (already above)
+   ├─ ncurses 6.1 [required: >=6.1,<6.2.0a0]
+   │  └─ libcxx 8.0.1 [required: >=4.0.1]
+   │     └─ libcxxabi 8.0.1 [required: 8.0.1, 0]
+   └─ readline 8.0 [required: >=8.0,<9.0a0]
+      └─ ncurses 6.1 [required: >=6.1,<6.2.0a0]
+         └─ dependencies of ncurses displayed above
 
 # which packages depend on a specific package
 $ conda-tree whoneeds xz
@@ -46,15 +47,15 @@ pip -> wheel -> python -> pip
 # full dependency tree
 $ conda-tree deptree --full
 neovim==0.3.1
-  - pynvim [required: Any, installed: 0.3.2]
-    - greenlet [required: Any, installed: 0.4.15]
-    - msgpack-python [required: >=0.5.0, installed: 0.6.1]
-      - libcxx [required: >=4.0.1, installed: 8.0.1]
-        - libcxxabi [required: 8.0.1, 0, installed: 8.0.1]
+   └─ pynvim 0.3.2 [required: any]
+      ├─ greenlet 0.4.15 [required: any]
+      └─ msgpack-python 0.6.1 [required: >=0.5.0]
+         └─ libcxx 8.0.1 [required: >=4.0.1]
+            └─ libcxxabi 8.0.1 [required: 8.0.1, 0]
 conda-tree==0.0.4
-  - conda [required: Any, installed: 4.7.11]
-    - conda-package-handling [required: >=1.3.0, installed: 1.4.1]
-      - libarchive [required: >=3.3.3, installed: 3.3.3]
+   ├─ conda 4.7.11 [required: any]
+   │  ├─ conda-package-handling 1.4.1 [required: >=1.3.0]
+   │  │  ├─ libarchive 3.3.3 [required: >=3.3.3]
 ...
 
 # query a different conda prefix/env
