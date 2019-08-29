@@ -208,9 +208,6 @@ def main():
         args.prefix = sys.prefix
          
     l = get_local_cache(args.prefix)
-    # To know when we have to hide python from the dependency graph
-    # In other words, when do we need to have a graph that is not
-    # cyclical?
     g = make_cache_graph(l)
 
     ######
@@ -272,7 +269,7 @@ def main():
         sys.exit(1)
 
     #######
-    # Warning messages
+    # End warning messages
     #######
 
     # If we use a tree-based command without --full enabled

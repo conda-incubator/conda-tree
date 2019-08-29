@@ -33,7 +33,7 @@ sqlite==3.29.0
   │     └─ libcxxabi 8.0.1 [required: 8.0.1, 0]
   └─ readline 8.0 [required: >=8.0,<9.0a0]
      └─ ncurses 6.1 [required: >=6.1,<6.2.0a0]
-       └─ dependencies of ncurses displayed above
+        └─ dependencies of ncurses displayed above
 
 # which packages depend on a specific package
 $ conda-tree whoneeds xz
@@ -47,11 +47,14 @@ pip -> wheel -> python -> pip
 # full dependency tree
 $ conda-tree deptree --full
 neovim==0.3.1
-  └─ pynvim 0.3.2 [required: any]
-     ├─ greenlet 0.4.15 [required: any]
-     └─ msgpack-python 0.6.1 [required: >=0.5.0]
-        └─ libcxx 8.0.1 [required: >=4.0.1]
-           └─ libcxxabi 8.0.1 [required: 8.0.1, 0]
+  ├─ pynvim 0.3.2 [required: any]
+  │  ├─ greenlet 0.4.15 [required: any]
+  │  │  └─ python 3.7.3 [required: >=3.7,<3.8.0a0]
+  │  │     ├─ bzip2 1.0.8 [required: >=1.0.6,<2.0a0]
+  │  │     ├─ libcxx 8.0.1 [required: >=4.0.1]
+  │  │     │  └─ libcxxabi 8.0.1 [required: 8.0.1, 0]
+  │  │     ├─ libffi 3.2.1 [required: >=3.2.1,<3.3.0a0]
+...
 conda-tree==0.0.4
   ├─ conda 4.7.11 [required: any]
   │  ├─ conda-package-handling 1.4.1 [required: >=1.3.0]
