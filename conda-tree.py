@@ -82,6 +82,7 @@ def print_dep_tree(g, pkg, prev, state):
             # or, if '--full' is used, a special case for python.
         else False)
     will_create_subtree = (True if len(e) >= 1 else False)
+    if len(e) > 0: state["tree_exists"].add(pkg)
 
     # If the package is a leaf
     if indent == 0:
