@@ -9,7 +9,7 @@ import subprocess
 import conda.exports
 import networkx
 
-__version__ = '0.0.5'
+__version__ = '0.1.0'
 
 # The number of spaces 
 INIT_TABSIZE = 3
@@ -192,21 +192,24 @@ def main():
 
     args = parser.parse_args()
 
-    if args.name is not None:
-        # Allow user to specify name, but check the environment for an
-        # existing CONDA_EXE command.  This allows a different conda
-        # package to be installed (and imported above) but will
-        # resolve the name using their expected conda.  (The imported
-        # conda here will find the environments, but might not name
-        # them as the user expects.)
+    # Allow user to specify name, but check the environment for an
+    # existing CONDA_EXE command.  This allows a different conda
+    # package to be installed (and imported above) but will
+    # resolve the name using their expected conda.  (The imported
+    # conda here will find the environments, but might not name
+    # them as the user expects.)
+    if args.prefix is None:
         _conda = os.environ.get('CONDA_EXE', 'conda')
         _info = json.loads(subprocess.check_output(
             [_conda, 'info', '-e', '--json']))
-        args.prefix = conda.base.context.locate_prefix_by_name(
-            name=args.name, envs_dirs=_info['envs_dirs'])
-
-    if args.prefix is None:
-        args.prefix = sys.prefix
+        if args.name is None:
+            if _info['active_prefix'] is not None:
+                args.prefix = _info['active_prefix']
+            else:
+                args.prefix = _info['default_prefix']
+        else:
+            args.prefix = conda.base.context.locate_prefix_by_name(
+                name=args.name, envs_dirs=_info['envs_dirs'])
          
     l = get_local_cache(args.prefix)
     g = make_cache_graph(l)
