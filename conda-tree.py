@@ -9,9 +9,9 @@ import subprocess
 import conda.exports
 import networkx
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
-# The number of spaces 
+# The number of spaces
 INIT_TABSIZE = 3
 TABSIZE = 3
 
@@ -60,8 +60,8 @@ def print_dep_tree(g, pkg, prev, state):
     empty_cols, is_last = state["empty_cols"], state["is_last"]
     tree_exists = state["tree_exists"]
 
-    s = ""                      # String to print
-    v = g.nodes[pkg]['version'] # Version of package
+    s = ""                          # String to print
+    v = g.nodes[pkg].get('version') # Version of package
 
     full_tree = True if ((hasattr(args, "full") and args.full)) else False
 
@@ -71,14 +71,14 @@ def print_dep_tree(g, pkg, prev, state):
     # Maybe?: Sort edges in alphabetical order
     # e = sorted(e, key=(lambda i: i[1] if down_search else i[0]))
 
-    if args.small: 
+    if args.small:
         if "conda" in e: state["tree_exists"].add("conda")
         if "python" in e: state["tree_exists"].add("python")
 
     dependencies_to_hide = (True # We hide dependencies if...
         if ((pkg in state["tree_exists"] and not args.full)
             # Package already displayed and '--full' not used.
-            or (args.full and pkg in state["tree_exists"] and pkg == "python")) 
+            or (args.full and pkg in state["tree_exists"] and pkg == "python"))
             # or, if '--full' is used, a special case for python.
         else False)
     will_create_subtree = (True if len(e) >= 1 else False)
@@ -86,16 +86,19 @@ def print_dep_tree(g, pkg, prev, state):
 
     # If the package is a leaf
     if indent == 0:
-        s += f"{pkg}=={v}\n"
+        if v is not None:
+            s += f"{pkg}=={v}\n"
+        else:
+            s += pkg
     # Let's print the branch
     else:
-        # Finding requirements for package from the parent 
+        # Finding requirements for package from the parent
         # (or child, if we are running the 'whoneeds' subcommand)
-        requirement = (', '.join(g.edges[prev, pkg]['version']) 
+        requirement = (', '.join(g.edges[prev, pkg]['version'])
             if down_search else ', '.join(g.edges[pkg, prev]['version']))
         r = 'any' if requirement == '' else requirement
         # Preparing the prepend string
-        br = ('└─' if is_last else '├─') 
+        br = ('└─' if is_last else '├─')
         # Optional: + ('┬' if will_create_subtree else '─')
         i = ""
         for x in range(indent):
@@ -103,9 +106,12 @@ def print_dep_tree(g, pkg, prev, state):
                 i += ' ' * 2
             elif x in empty_cols:
                 i += ' ' * TABSIZE
-            else: 
+            else:
                 i += ('│' + (' ' * (TABSIZE - 1)))
-        s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
+        if v is not None:
+            s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
+        else:
+            s += f"{i}{br} {pkg}{ansi.DIM} [required: {r}]{ansi.ENDC}\n"
         if dependencies_to_hide:
             state["hidden_dependencies"] = True
             will_create_subtree = False
@@ -125,7 +131,7 @@ def print_dep_tree(g, pkg, prev, state):
     # Print the children
     if will_create_subtree:
         state["indent"] += 1
-        for pack in e: 
+        for pack in e:
             if state["is_last"]: state["empty_cols"].append(indent)
             state["is_last"] = False if e[-1] != pack else True
             tree_str, state = print_dep_tree(g, pack, pkg, state)
@@ -142,7 +148,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--prefix', default=None)
     parser.add_argument('-n','--name', default=None)
-    parser.add_argument('-v','--version', action='version', version='%(prog)s '+__version__)
+    parser.add_argument('-V','--version', action='version', version='%(prog)s '+__version__)
 
     subparser = parser.add_subparsers(dest='subcmd')
 
@@ -154,11 +160,11 @@ def main():
     # Arguments for "rec_or_tree" commands
     # Subcommands that can yield direct dependencies, recursive dependencies, or a tree view
     rec_or_tree = package_cmds.add_mutually_exclusive_group(required=False)
-    rec_or_tree.add_argument('-t', '--tree', 
+    rec_or_tree.add_argument('-t', '--tree',
         help=('show dependencies of dependencies in tree form, ' +
-              'ignores python as a dependency to avoid cycles'), 
+              'ignores python as a dependency to avoid cycles'),
         default=False, action="store_true")
-    rec_or_tree.add_argument('-r','--recursive', 
+    rec_or_tree.add_argument('-r','--recursive',
         help='show dependencies of dependencies',
         default=False, action='store_true')
 
@@ -166,13 +172,13 @@ def main():
     # Subcommands that enable users to hide a part of the result
     hiding_cmds = argparse.ArgumentParser(add_help=False)
     hiding_args = hiding_cmds.add_mutually_exclusive_group(required=False)
-    hiding_args.add_argument('--small', 
+    hiding_args.add_argument('--small',
         help=('does not show dependencies of conda or python' +
-              'to make the tree easier to understand'), 
+              'to make the tree easier to understand'),
         default=False, action='store_true')
-    hiding_args.add_argument('--full', 
+    hiding_args.add_argument('--full',
         help=('shows the complete dependency tree,' +
-              'with all the redundancies that it entails'), 
+              'with all the redundancies that it entails'),
         default=False, action='store_true')
 
     # Definining the simple subcommands
@@ -180,10 +186,10 @@ def main():
     subparser.add_parser('cycles', help='shows dependency cycles')
 
     # Defining the complex subcommands
-    subparser.add_parser('whoneeds', 
-        help='shows packages that depends on this package', 
+    subparser.add_parser('whoneeds',
+        help='shows packages that depends on this package',
         parents=[package_cmds, hiding_cmds])
-    subparser.add_parser('depends', 
+    subparser.add_parser('depends',
         help='shows this package dependencies',
         parents=[package_cmds, hiding_cmds])
     subparser.add_parser('deptree',
@@ -210,7 +216,7 @@ def main():
         else:
             args.prefix = conda.base.context.locate_prefix_by_name(
                 name=args.name, envs_dirs=_info['envs_dirs'])
-         
+    
     l = get_local_cache(args.prefix)
     g = make_cache_graph(l)
 
@@ -236,7 +242,7 @@ def main():
 
     elif args.subcmd in ['depends', 'whoneeds']:
         # This variable defines whether we are searching down the dependency
-        # tree, or if rather we are looking for which packages depend on the 
+        # tree, or if rather we are looking for which packages depend on the
         # package, which would be searching up.
         # The 'depends' subcommand corresponds to a down search.
         state["down_search"] = (args.subcmd == "depends")
