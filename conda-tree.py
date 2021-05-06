@@ -9,7 +9,7 @@ import subprocess
 import conda.exports
 import networkx
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 # The number of spaces
 INIT_TABSIZE = 3
