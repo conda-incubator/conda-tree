@@ -148,7 +148,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--prefix', default=None)
     parser.add_argument('-n','--name', default=None)
-    parser.add_argument('-v','--version', action='version', version='%(prog)s '+__version__)
+    parser.add_argument('-V','--version', action='version', version='%(prog)s '+__version__)
 
     subparser = parser.add_subparsers(dest='subcmd')
 
