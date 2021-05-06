@@ -60,8 +60,8 @@ def print_dep_tree(g, pkg, prev, state):
     empty_cols, is_last = state["empty_cols"], state["is_last"]
     tree_exists = state["tree_exists"]
 
-    s = ""                      # String to print
-    v = g.nodes[pkg]['version'] # Version of package
+    s = ""                          # String to print
+    v = g.nodes[pkg].get('version') # Version of package
 
     full_tree = True if ((hasattr(args, "full") and args.full)) else False
 
@@ -86,7 +86,10 @@ def print_dep_tree(g, pkg, prev, state):
 
     # If the package is a leaf
     if indent == 0:
-        s += f"{pkg}=={v}\n"
+        if v is not None:
+            s += f"{pkg}=={v}\n"
+        else:
+            s += pkg
     # Let's print the branch
     else:
         # Finding requirements for package from the parent 
@@ -105,7 +108,10 @@ def print_dep_tree(g, pkg, prev, state):
                 i += ' ' * TABSIZE
             else: 
                 i += ('│' + (' ' * (TABSIZE - 1)))
-        s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
+        if v is not None:
+            s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
+        else:
+            s += f"{i}{br} {pkg}{ansi.DIM} [required: {r}]{ansi.ENDC}\n"
         if dependencies_to_hide:
             state["hidden_dependencies"] = True
             will_create_subtree = False
