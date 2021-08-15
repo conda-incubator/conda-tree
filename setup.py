@@ -13,5 +13,9 @@ setup(name='conda-tree',
       author='Renan Valieris',
       url='https://github.com/rvalieris/conda-tree',
       py_modules=['conda_tree'],
+      install_requires=[
+          'networkx',
+          'colorama'
+      ],
       entry_points={
         'console_scripts': ['conda-tree=conda_tree:main']})
