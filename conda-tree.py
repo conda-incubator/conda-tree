@@ -11,7 +11,7 @@ import conda.exports
 import conda.api
 import networkx
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 # The number of spaces
 TABSIZE = 3
@@ -308,7 +308,7 @@ def main():
         if args.export:
             for p in get_leaves(g):
                 k = get_package_key(l, p)
-                print(l[k]['name']+"="+l[k]['version']+"="+l[k]['build'])
+                print(l[k]['schannel']+'::'+l[k]['name']+"="+l[k]['version']+"="+l[k]['build'])
         else:
             print(get_leaves(g))
 
