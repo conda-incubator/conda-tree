@@ -176,6 +176,8 @@ def main():
         help=('shows the complete dependency tree,' +
               'with all the redundancies that it entails'),
         default=False, action='store_true')
+    hiding_args.add_argument('--dot',
+         help=('print a graphviz dot graph format'), action='store_true', default=False)
 
     # Definining the simple subcommands
     subparser.add_parser('leaves', help='shows leaf packages')
@@ -255,6 +257,10 @@ def main():
                 sys.exit(1)
             tree, state = print_dep_tree(g, args.package, None, state)
             print(tree, end='')
+        elif args.dot:
+            fn = networkx.descendants if state["down_search"] else networkx.ancestors
+            e = list(fn(g, args.package))
+            print_graph_dot(g.subgraph(e+[args.package]))
         else:
             edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
             e = [i[1] for i in edges] if state["down_search"] else [i[0] for i in edges]
@@ -264,11 +270,14 @@ def main():
         print(get_leaves(g))
 
     elif args.subcmd == 'deptree':
-        complete_tree = ""
-        for pk in get_leaves(g):
-            tree, state = print_dep_tree(g, pk, None, state)
-            complete_tree += tree
-        print(''.join(complete_tree), end='')
+        if args.dot:
+            print_graph_dot(g)
+        else:
+            complete_tree = ""
+            for pk in get_leaves(g):
+                tree, state = print_dep_tree(g, pk, None, state)
+                complete_tree += tree
+            print(''.join(complete_tree), end='')
 
     else:
         parser.print_help()
