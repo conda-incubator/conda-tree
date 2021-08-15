@@ -8,7 +8,7 @@ import shutil
 shutil.copyfile('conda-tree.py', 'conda_tree.py')
 
 setup(name='conda-tree',
-      version='0.1.1',
+      version='1.0.0',
       description='conda dependency tree helper',
       author='Renan Valieris',
       url='https://github.com/rvalieris/conda-tree',

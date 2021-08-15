@@ -11,7 +11,7 @@ import conda.exports
 import conda.api
 import networkx
 
-__version__ = '0.1.1'
+__version__ = '1.0.0'
 
 # The number of spaces
 TABSIZE = 3
@@ -20,7 +20,7 @@ def get_local_cache(prefix):
     return conda.exports.linked_data(prefix=prefix)
 
 def get_package_key(cache, package_name):
-    ks = list(filter(lambda i: l[i]['name'] == package_name, l))
+    ks = list(filter(lambda i: cache[i]['name'] == package_name, cache))
     return ks[0]
 
 def make_cache_graph(cache):
@@ -212,7 +212,9 @@ def main():
          help=('print a graphviz dot graph notation'), action='store_true', default=False)
 
     # Definining the simple subcommands
-    subparser.add_parser('leaves', help='shows leaf packages')
+    subparser.add_parser('leaves',
+         help='shows leaf packages').add_argument('--export',
+             help='export leaves dependencies', action='store_true', default=False)
     subparser.add_parser('cycles', help='shows dependency cycles')
 
     # Defining the complex subcommands
@@ -303,7 +305,12 @@ def main():
             print(e)
 
     elif args.subcmd == 'leaves':
-        print(get_leaves(g))
+        if args.export:
+            for p in get_leaves(g):
+                k = get_package_key(l, p)
+                print(l[k]['name']+"="+l[k]['version']+"="+l[k]['build'])
+        else:
+            print(get_leaves(g))
 
     elif args.subcmd == 'deptree':
         if args.dot:
@@ -320,6 +327,7 @@ def main():
 
     elif args.subcmd == 'who-owns':
         find_who_owns_file(args.prefix,args.file)
+
     else:
         parser.print_help()
         sys.exit(1)
