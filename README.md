@@ -69,4 +69,34 @@ $ conda-tree -p /conda/envs/trinity leaves
 # query by name
 $ conda-tree -n trinity leaves
 ['trinity']
+
+# find dangling files that aren't owned by any package
+$ conda-tree -n base unowned-files
+/home/user/conda/LICENSE.txt
+
+$ conda-tree -n graphviz unowned-files
+/home/user/conda/envs/graphviz/var/cache/fontconfig/b67b32625a2bb51b023d3814a918f351-le64.cache-7
+/home/user/conda/envs/graphviz/var/cache/fontconfig/f93dd067-84cf-499d-a5a8-645ff5f927dc-le64.cache-7
+/home/user/conda/envs/graphviz/var/cache/fontconfig/923e285e415b1073c8df160bee08820f-le64.cache-7
+/home/user/conda/envs/graphviz/fonts/.uuid
+
+# find which package owns a file
+$ conda-tree -n graphviz who-owns bin/dot
+graphviz bin/dot
+graphviz bin/dot2gxl
+graphviz bin/dot_builtins
+
+# export a minimal set of dependencies of a env
+# can be used to re-create a env with conda create -n <new-env> --file <dep-file>
+$ conda-tree -n graphviz leaves --export
+graphviz=2.48.0=h85b4f2f_0
+
+# export a graphviz dot notation file of the dependicies tree
+$ conda-tree deptree --dot > file.dot
+$ conda-tree depends <package> --dot > file.dot
+$ conda-tree whoneeds <package> --dot > file.dot
+
+# then render to pdf with graphviz's dot tool
+$ dot -Tpdf file.dot -o tree.pdf
+
 ```

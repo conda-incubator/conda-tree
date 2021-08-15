@@ -5,25 +5,22 @@ import json
 import os
 import sys
 import subprocess
+from colorama import Fore, Back, Style
 
 import conda.exports
+import conda.api
 import networkx
 
-__version__ = '0.1.1'
+__version__ = '1.0.0'
 
 # The number of spaces
-INIT_TABSIZE = 3
 TABSIZE = 3
-
-class ansi:
-    ENDC = '\033[0m'
-    DIM = '\033[2m'
 
 def get_local_cache(prefix):
     return conda.exports.linked_data(prefix=prefix)
 
 def get_package_key(cache, package_name):
-    ks = list(filter(lambda i: l[i]['name'] == package_name, l))
+    ks = list(filter(lambda i: cache[i]['name'] == package_name, cache))
     return ks[0]
 
 def make_cache_graph(cache):
@@ -109,9 +106,9 @@ def print_dep_tree(g, pkg, prev, state):
             else:
                 i += ('│' + (' ' * (TABSIZE - 1)))
         if v is not None:
-            s += f"{i}{br} {pkg}{ansi.DIM} {v} [required: {r}]{ansi.ENDC}\n"
+            s += f"{i}{br} {pkg}{Style.DIM} {v} [required: {r}]{Style.RESET_ALL}\n"
         else:
-            s += f"{i}{br} {pkg}{ansi.DIM} [required: {r}]{ansi.ENDC}\n"
+            s += f"{i}{br} {pkg}{Style.DIM} [required: {r}]{Style.RESET_ALL}\n"
         if dependencies_to_hide:
             state["hidden_dependencies"] = True
             will_create_subtree = False
@@ -124,7 +121,7 @@ def print_dep_tree(g, pkg, prev, state):
             else:
                 br2 = ' ' if is_last else '│'
                 word = "dependencies" if down_search else "dependent packages"
-                s += f"{i}{br2}  {ansi.DIM}└─ {word} of {pkg} displayed above{ansi.ENDC}\n"
+                s += f"{i}{br2}  {Style.DIM}└─ {word} of {pkg} displayed above{Style.RESET_ALL}\n"
         else:
             if len(e) > 0: state["tree_exists"].add(pkg)
 
@@ -143,6 +140,37 @@ def print_dep_tree(g, pkg, prev, state):
         state["is_last"] = False
     return s, state
 
+def get_pkg_files(prefix):
+    pkg_files = set()
+    for p in conda.api.PrefixData(prefix).iter_records():
+        for f in p['files']:
+            pkg_files.add(f)
+    return pkg_files
+
+# check if dir is internal of conda
+def is_internal_dir(prefix,path):
+    for t in ['pkgs','conda-bld','conda-meta','locks','envs']:
+        if path.startswith(os.path.join(prefix,t)): return True
+    return False
+
+def find_who_owns_file(prefix, target_path):
+    for p in conda.api.PrefixData(prefix).iter_records():
+        for f in p['files']:
+            if target_path in f or f in target_path:
+                print(p['name'], f)
+
+def find_unowned_files(prefix):
+    pkg_files = get_pkg_files(prefix)
+
+    for root, dirs, files in os.walk(prefix):
+        if is_internal_dir(prefix,root):
+            continue
+
+        for f in files:
+            f0 = os.path.join(root,f)
+            f1 = f0.replace(prefix,"").lstrip(os.sep)
+            if f1 not in pkg_files:
+                print(f0)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -180,9 +208,13 @@ def main():
         help=('shows the complete dependency tree,' +
               'with all the redundancies that it entails'),
         default=False, action='store_true')
+    hiding_args.add_argument('--dot',
+         help=('print a graphviz dot graph notation'), action='store_true', default=False)
 
     # Definining the simple subcommands
-    subparser.add_parser('leaves', help='shows leaf packages')
+    subparser.add_parser('leaves',
+         help='shows leaf packages').add_argument('--export',
+             help='export leaves dependencies', action='store_true', default=False)
     subparser.add_parser('cycles', help='shows dependency cycles')
 
     # Defining the complex subcommands
@@ -195,6 +227,10 @@ def main():
     subparser.add_parser('deptree',
         help="shows the complete dependency tree ('python' is excluded to avoid cycles)",
         parents=[hiding_cmds])
+    subparser.add_parser('unowned-files',
+        help='shows files that are not owned by any package')
+    subparser.add_parser('who-owns',
+        help='find which package owns a given file').add_argument('file',help='a file path or substring of the target file')
 
     args = parser.parse_args()
 
@@ -259,20 +295,38 @@ def main():
                 sys.exit(1)
             tree, state = print_dep_tree(g, args.package, None, state)
             print(tree, end='')
+        elif args.dot:
+            fn = networkx.descendants if state["down_search"] else networkx.ancestors
+            e = list(fn(g, args.package))
+            print_graph_dot(g.subgraph(e+[args.package]))
         else:
             edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
             e = [i[1] for i in edges] if state["down_search"] else [i[0] for i in edges]
             print(e)
 
     elif args.subcmd == 'leaves':
-        print(get_leaves(g))
+        if args.export:
+            for p in get_leaves(g):
+                k = get_package_key(l, p)
+                print(l[k]['name']+"="+l[k]['version']+"="+l[k]['build'])
+        else:
+            print(get_leaves(g))
 
     elif args.subcmd == 'deptree':
-        complete_tree = ""
-        for pk in get_leaves(g):
-            tree, state = print_dep_tree(g, pk, None, state)
-            complete_tree += tree
-        print(''.join(complete_tree), end='')
+        if args.dot:
+            print_graph_dot(g)
+        else:
+            complete_tree = ""
+            for pk in get_leaves(g):
+                tree, state = print_dep_tree(g, pk, None, state)
+                complete_tree += tree
+            print(''.join(complete_tree), end='')
+
+    elif args.subcmd == 'unowned-files':
+        find_unowned_files(args.prefix)
+
+    elif args.subcmd == 'who-owns':
+        find_who_owns_file(args.prefix,args.file)
 
     else:
         parser.print_help()
@@ -284,16 +338,16 @@ def main():
 
     # If we use a tree-based command without --full enabled
     if state["hidden_dependencies"] and not args.full:
-        print(f"\n{ansi.DIM}For the sake of clarity, some redundancies have been hidden.\n" +
-              f"Please use the '--full' option to display them anyway.{ansi.ENDC}")
+        print(f"\n{Style.DIM}For the sake of clarity, some redundancies have been hidden.\n" +
+              f"Please use the '--full' option to display them anyway.{Style.RESET_ALL}")
         if not args.small:
-            print(f"\n{ansi.DIM}If you are tired of seeing 'conda' and 'python' everywhere,\n" +
-              f"you can use the '--small' option to hide their dependencies completely.{ansi.ENDC}")
+            print(f"\n{Style.DIM}If you are tired of seeing 'conda' and 'python' everywhere,\n" +
+              f"you can use the '--small' option to hide their dependencies completely.{Style.RESET_ALL}")
 
     # If we use a tree-based command without --full enabled
     if state["hidden_dependencies"] and args.full:
-        print(f"\n{ansi.DIM}The full dependency tree shows dependencies of python only once.\n" +
-              f"There is no way around this because of dependency cycles.{ansi.ENDC}")
+        print(f"\n{Style.DIM}The full dependency tree shows dependencies of python only once.\n" +
+              f"There is no way around this because of dependency cycles.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
