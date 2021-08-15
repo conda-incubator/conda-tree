@@ -8,6 +8,7 @@ import subprocess
 from colorama import Fore, Back, Style
 
 import conda.exports
+import conda.api
 import networkx
 
 __version__ = '0.1.1'
@@ -139,6 +140,31 @@ def print_dep_tree(g, pkg, prev, state):
         state["is_last"] = False
     return s, state
 
+def get_pkg_files(prefix):
+    pkg_files = set()
+    for p in conda.api.PrefixData(prefix).iter_records():
+        for f in p['files']:
+            pkg_files.add(f)
+    return pkg_files
+
+# check if dir is internal of conda
+def is_internal_dir(prefix,path):
+    for t in ['pkgs','conda-bld','conda-meta','locks','envs']:
+        if path.startswith(os.path.join(prefix,t)): return True
+    return False
+
+def find_unowned_files(prefix):
+    pkg_files = get_pkg_files(prefix)
+
+    for root, dirs, files in os.walk(prefix):
+        if is_internal_dir(prefix,root):
+            continue
+
+        for f in files:
+            f0 = os.path.join(root,f)
+            f1 = f0.replace(prefix,"").lstrip(os.sep)
+            if f1 not in pkg_files:
+                print(f0)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -177,7 +203,7 @@ def main():
               'with all the redundancies that it entails'),
         default=False, action='store_true')
     hiding_args.add_argument('--dot',
-         help=('print a graphviz dot graph format'), action='store_true', default=False)
+         help=('print a graphviz dot graph notation'), action='store_true', default=False)
 
     # Definining the simple subcommands
     subparser.add_parser('leaves', help='shows leaf packages')
@@ -193,6 +219,8 @@ def main():
     subparser.add_parser('deptree',
         help="shows the complete dependency tree ('python' is excluded to avoid cycles)",
         parents=[hiding_cmds])
+    subparser.add_parser('unowned-files',
+        help='shows files that are not owned by any package')
 
     args = parser.parse_args()
 
@@ -278,6 +306,9 @@ def main():
                 tree, state = print_dep_tree(g, pk, None, state)
                 complete_tree += tree
             print(''.join(complete_tree), end='')
+
+    elif args.subcmd == 'unowned-files':
+        find_unowned_files(args.prefix)
 
     else:
         parser.print_help()
