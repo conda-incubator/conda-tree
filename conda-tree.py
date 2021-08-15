@@ -153,6 +153,12 @@ def is_internal_dir(prefix,path):
         if path.startswith(os.path.join(prefix,t)): return True
     return False
 
+def find_who_owns_file(prefix, target_path):
+    for p in conda.api.PrefixData(prefix).iter_records():
+        for f in p['files']:
+            if target_path in f or f in target_path:
+                print(p['name'], f)
+
 def find_unowned_files(prefix):
     pkg_files = get_pkg_files(prefix)
 
@@ -221,6 +227,8 @@ def main():
         parents=[hiding_cmds])
     subparser.add_parser('unowned-files',
         help='shows files that are not owned by any package')
+    subparser.add_parser('who-owns',
+        help='find which package owns a given file').add_argument('file',help='a file path or substring of the target file')
 
     args = parser.parse_args()
 
@@ -310,6 +318,8 @@ def main():
     elif args.subcmd == 'unowned-files':
         find_unowned_files(args.prefix)
 
+    elif args.subcmd == 'who-owns':
+        find_who_owns_file(args.prefix,args.file)
     else:
         parser.print_help()
         sys.exit(1)
