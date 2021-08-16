@@ -11,7 +11,7 @@ import conda.exports
 import conda.api
 import networkx
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 # The number of spaces
 TABSIZE = 3
@@ -168,7 +168,7 @@ def find_unowned_files(prefix):
 
         for f in files:
             f0 = os.path.join(root,f)
-            f1 = f0.replace(prefix,"").lstrip(os.sep)
+            f1 = f0.replace(prefix, "", 1).lstrip(os.sep)
             if f1 not in pkg_files:
                 print(f0)
 
