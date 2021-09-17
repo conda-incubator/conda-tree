@@ -8,6 +8,13 @@ conda dependency tree helper
 ```bash
 conda install -c conda-forge conda-tree
 ```
+  
+  
+If you're using python 3.9 you might have to run:
+```bash
+conda install -c conda-forge conda-tree 'networkx>=2.5'
+```
+to make sure the right networkx version is installed.
 
 ## Features
 
