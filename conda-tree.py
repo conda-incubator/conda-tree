@@ -75,8 +75,8 @@ def print_dep_tree(g, pkg, prev, state):
     dependencies_to_hide = (True # We hide dependencies if...
         if ((pkg in state["tree_exists"] and not args.full)
             # Package already displayed and '--full' not used.
-            or (args.full and pkg in state["tree_exists"] and pkg == "python"))
-            # or, if '--full' is used, a special case for python.
+            or (args.full and pkg in state["tree_exists"] and pkg in state['pkgs_with_cycles']))
+            # or, if '--full' is used but the package is part of a cyclic sub-graph
         else False)
     will_create_subtree = (True if len(e) >= 1 else False)
     if len(e) > 0: state["tree_exists"].add(pkg)
@@ -113,10 +113,8 @@ def print_dep_tree(g, pkg, prev, state):
             state["hidden_dependencies"] = True
             will_create_subtree = False
             # We do not print these lines if:
-            # python dependencies with '--full' on
-            # for python and conda dependencies if '-small' on
-            if ((pkg == "python" and args.full)
-                or (pkg in ["python", "conda"] and args.small)):
+            # python and conda dependencies if '-small' on
+            if (pkg in ["python", "conda"] and args.small):
                 pass
             else:
                 br2 = ' ' if is_last else '│'
@@ -172,6 +170,14 @@ def find_unowned_files(prefix):
             if f1 not in pkg_files:
                 print(f0)
 
+def is_node_reachable(graph, source, target):
+    if isinstance(source, list):
+        for s in source:
+            if is_node_reachable(graph, s, target):
+                return True
+    else:
+        return any(networkx.algorithms.simple_paths.all_simple_paths(graph, source, target))
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--prefix', default=None)
@@ -189,8 +195,7 @@ def main():
     # Subcommands that can yield direct dependencies, recursive dependencies, or a tree view
     rec_or_tree = package_cmds.add_mutually_exclusive_group(required=False)
     rec_or_tree.add_argument('-t', '--tree',
-        help=('show dependencies of dependencies in tree form, ' +
-              'ignores python as a dependency to avoid cycles'),
+        help=('show dependencies of dependencies in tree form'),
         default=False, action="store_true")
     rec_or_tree.add_argument('-r','--recursive',
         help='show dependencies of dependencies',
@@ -201,7 +206,7 @@ def main():
     hiding_cmds = argparse.ArgumentParser(add_help=False)
     hiding_args = hiding_cmds.add_mutually_exclusive_group(required=False)
     hiding_args.add_argument('--small',
-        help=('does not show dependencies of conda or python' +
+        help=('does not show dependencies of conda or python ' +
               'to make the tree easier to understand'),
         default=False, action='store_true')
     hiding_args.add_argument('--full',
@@ -212,9 +217,13 @@ def main():
          help=('print a graphviz dot graph notation'), action='store_true', default=False)
 
     # Definining the simple subcommands
-    subparser.add_parser('leaves',
-         help='shows leaf packages').add_argument('--export',
-             help='export leaves dependencies', action='store_true', default=False)
+    lv_cmd = subparser.add_parser('leaves',
+         help='shows leaf packages')
+    lv_cmd.add_argument('--export', help='export leaves dependencies',
+        action='store_true', default=False)
+    lv_cmd.add_argument('--with-cycles', help='include orphan cycles',
+        action='store_true', default=False)
+
     subparser.add_parser('cycles', help='shows dependency cycles')
 
     # Defining the complex subcommands
@@ -225,7 +234,7 @@ def main():
         help='shows this package dependencies',
         parents=[package_cmds, hiding_cmds])
     subparser.add_parser('deptree',
-        help="shows the complete dependency tree ('python' is excluded to avoid cycles)",
+        help="shows the complete dependency tree",
         parents=[hiding_cmds])
     subparser.add_parser('unowned-files',
         help='shows files that are not owned by any package')
@@ -252,7 +261,7 @@ def main():
         else:
             args.prefix = conda.base.context.locate_prefix_by_name(
                 name=args.name, envs_dirs=_info['envs_dirs'])
-    
+
     l = get_local_cache(args.prefix)
     g = make_cache_graph(l)
 
@@ -262,16 +271,28 @@ def main():
     def get_leaves(graph):
         return list(map(lambda i:i[0],(filter(lambda i:i[1]==0,graph.in_degree()))))
 
+    def get_leaves_plus_cycles(graph):
+        lv = get_leaves(graph)
+        for pks in networkx.simple_cycles(g):
+            if is_node_reachable(g, lv, pks[0]):
+                    pass
+            else:
+                 lv.append(pks[0])
+        return lv
+
     def get_cycles(graph):
         s = ""
         for i in networkx.simple_cycles(graph):
             s += " -> ".join(i)+" -> "+i[0] + "\n"
         return s
 
+    def pkgs_with_cycles(graph):
+        return set(sum(networkx.simple_cycles(graph), []))
+
     # Default state for the recursive tree function
     state = {'down_search': True, 'args': args, 'indent': 0, 'indent': 0,
              'empty_cols': [], 'is_last': False, 'tree_exists': set(),
-             'hidden_dependencies': False}
+             'hidden_dependencies': False, 'pkgs_with_cycles': pkgs_with_cycles(g)}
 
     if args.subcmd == 'cycles':
         print(get_cycles(g), end='')
@@ -290,9 +311,6 @@ def main():
             e = list(fn(g, args.package))
             print(e)
         elif args.tree:
-            if args.package == "python" and args.full:
-                print("'python' does not have full tree views, as it has cyclical dependencies.")
-                sys.exit(1)
             tree, state = print_dep_tree(g, args.package, None, state)
             print(tree, end='')
         elif args.dot:
@@ -305,19 +323,23 @@ def main():
             print(e)
 
     elif args.subcmd == 'leaves':
+        if args.with_cycles:
+            lv = get_leaves_plus_cycles(g)
+        else:
+            lv = get_leaves(g)
         if args.export:
-            for p in get_leaves(g):
+            for p in lv:
                 k = get_package_key(l, p)
                 print('%s::%s=%s=%s' % (l[k].channel.channel_name, l[k].name, l[k].version, l[k].build))
         else:
-            print(get_leaves(g))
+            print(lv)
 
     elif args.subcmd == 'deptree':
         if args.dot:
             print_graph_dot(g)
         else:
             complete_tree = ""
-            for pk in get_leaves(g):
+            for pk in get_leaves_plus_cycles(g):
                 tree, state = print_dep_tree(g, pk, None, state)
                 complete_tree += tree
             print(''.join(complete_tree), end='')
@@ -346,8 +368,8 @@ def main():
 
     # If we use a tree-based command without --full enabled
     if state["hidden_dependencies"] and args.full:
-        print(f"\n{Style.DIM}The full dependency tree shows dependencies of python only once.\n" +
-              f"There is no way around this because of dependency cycles.{Style.RESET_ALL}")
+        print(f"\n{Style.DIM}The full dependency tree shows dependencies of packages " +
+              f"with cycles only once.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
