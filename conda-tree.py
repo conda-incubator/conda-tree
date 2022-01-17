@@ -5,13 +5,15 @@ import json
 import os
 import sys
 import subprocess
+import colorama
 from colorama import Fore, Back, Style
+colorama.init()
 
 import conda.exports
 import conda.api
 import networkx
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 # The number of spaces
 TABSIZE = 3
