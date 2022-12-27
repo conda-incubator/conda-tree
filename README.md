@@ -16,6 +16,25 @@ conda install -c conda-forge conda-tree 'networkx>=2.5'
 ```
 to make sure the right networkx version is installed.
 
+## Conda sub-command
+
+When conda-tree is installed on the base environment, you can use the "tree" sub-command from any env:
+
+```bash
+# normal usage
+(base) $ conda tree leaves
+package-1
+package-2
+
+# activate another env
+(base) $ conda activate env2
+
+# no need to install conda-tree on env2
+(env2) $ conda tree leaves
+package-x
+package-y
+```
+
 ## Features
 
 ### Query the dependency tree
@@ -23,15 +42,23 @@ to make sure the right networkx version is installed.
 ```bash
 # packages that no other package depends on
 $ conda-tree leaves
-['samtools','bcftools',...]
+samtools
+bcftools
+etc
 
 # dependencies of a specific package
 $ conda-tree depends samtools
-['curl', 'xz', 'libgcc', 'zlib']
+curl
+xz
+libgcc
+zlib
 
 # which packages depend on a specific package
 $ conda-tree whoneeds xz
-['samtools', 'bcftools', 'htslib', 'python']
+samtools
+bcftools
+htslib
+python
 
 # dependency cycles
 $ conda-tree cycles
@@ -77,11 +104,11 @@ conda-tree==0.0.4
 ```bash
 # query by path
 $ conda-tree -p /conda/envs/trinity leaves
-['trinity']
+trinity
 
 # query by name
 $ conda-tree -n trinity leaves
-['trinity']
+trinity
 ```
 
 ### Query package files

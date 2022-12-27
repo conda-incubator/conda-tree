@@ -6,14 +6,15 @@ import os
 import sys
 import subprocess
 import colorama
-from colorama import Fore, Back, Style
+from colorama import Style
 colorama.init()
 
 import conda.exports
 import conda.api
+import conda.base.context
 import networkx
 
-__version__ = '1.0.5'
+__version__ = '1.1.0'
 
 # The number of spaces
 TABSIZE = 3
@@ -40,7 +41,7 @@ def make_cache_graph(cache):
 def print_graph_dot(g):
     print("digraph {")
     for k,v in g.edges():
-       print("  \"{}\" -> \"{}\"".format(k,v))
+       print(f"  \"{k}\" -> \"{v}\"")
     print("}")
 
 def remove_from_graph(g, node, _cache=None):
@@ -57,12 +58,9 @@ def print_dep_tree(g, pkg, prev, state):
     down_search, args = state["down_search"], state["args"]
     indent = state["indent"]
     empty_cols, is_last = state["empty_cols"], state["is_last"]
-    tree_exists = state["tree_exists"]
 
     s = ""                          # String to print
     v = g.nodes[pkg].get('version') # Version of package
-
-    full_tree = True if ((hasattr(args, "full") and args.full)) else False
 
     # Create list of edges
     edges = g.out_edges(pkg) if down_search else g.in_edges(pkg)
@@ -70,9 +68,9 @@ def print_dep_tree(g, pkg, prev, state):
     # Maybe?: Sort edges in alphabetical order
     # e = sorted(e, key=(lambda i: i[1] if down_search else i[0]))
 
-    if args.small:
-        if "conda" in e: state["tree_exists"].add("conda")
-        if "python" in e: state["tree_exists"].add("python")
+    if len(args.exclude) > 0:
+        for p in args.exclude:
+            state['tree_exists'].add(p)
 
     dependencies_to_hide = (True # We hide dependencies if...
         if ((pkg in state["tree_exists"] and not args.full)
@@ -116,7 +114,7 @@ def print_dep_tree(g, pkg, prev, state):
             will_create_subtree = False
             # We do not print these lines if:
             # python and conda dependencies if '-small' on
-            if (pkg in ["python", "conda"] and args.small):
+            if pkg in args.exclude:
                 pass
             else:
                 br2 = ' ' if is_last else '│'
@@ -157,7 +155,7 @@ def find_who_owns_file(prefix, target_path):
     for p in conda.api.PrefixData(prefix).iter_records():
         for f in p['files']:
             if target_path in f or f in target_path:
-                print(p['name'], f)
+                print(f'{p["name"]}\t{f}')
 
 def find_unowned_files(prefix):
     pkg_files = get_pkg_files(prefix)
@@ -180,51 +178,80 @@ def is_node_reachable(graph, source, target):
     else:
         return any(networkx.algorithms.simple_paths.all_simple_paths(graph, source, target))
 
+def print_pkgs(pkgs, with_json=False):
+    if with_json:
+        print(json.dumps(pkgs))
+    else:
+        for p in pkgs:
+            print(p)
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p','--prefix', default=None)
-    parser.add_argument('-n','--name', default=None)
-    parser.add_argument('-V','--version', action='version', version='%(prog)s '+__version__)
+    parser.add_argument('-p','--prefix',
+        help='full path to environment location (i.e. prefix)',
+        default=None)
+    parser.add_argument('-n','--name',
+        help='name of environment',
+        default=None)
+    parser.add_argument('-V','--version',
+        action='version',
+        version='%(prog)s '+__version__)
 
     subparser = parser.add_subparsers(dest='subcmd')
 
-    # Arguments for "package_cmds" commands
-    # Subcommands that deal with the dependencies of packages
-    package_cmds = argparse.ArgumentParser(add_help=False)
-    package_cmds.add_argument('package', help='the target package')
-
+    format_args = argparse.ArgumentParser(add_help=False)
     # Arguments for "rec_or_tree" commands
     # Subcommands that can yield direct dependencies, recursive dependencies, or a tree view
-    rec_or_tree = package_cmds.add_mutually_exclusive_group(required=False)
+    rec_or_tree = format_args.add_mutually_exclusive_group(required=False)
     rec_or_tree.add_argument('-t', '--tree',
-        help=('show dependencies of dependencies in tree form'),
+        help='show dependencies of dependencies in tree form',
+        action="store_true", default=False)
+    rec_or_tree.add_argument('--dot',
+         help='print a graphviz dot graph notation',
+         action="store_true", default=False)
+    rec_or_tree.add_argument('--json',
+        help='print packages in json format',
         default=False, action="store_true")
-    rec_or_tree.add_argument('-r','--recursive',
+
+    # Arguments for "package_cmds" commands
+    # Subcommands that deal with the dependencies of packages
+    package_cmds = argparse.ArgumentParser(add_help=False, parents=[format_args])
+    package_cmds.add_argument('package', help='the target package')
+    package_cmds.add_argument('-r','--recursive',
         help='show dependencies of dependencies',
-        default=False, action='store_true')
+        action='store_true',
+        default=False)
 
     # Arguments for "hiding" commands
     # Subcommands that enable users to hide a part of the result
     hiding_cmds = argparse.ArgumentParser(add_help=False)
-    hiding_args = hiding_cmds.add_mutually_exclusive_group(required=False)
-    hiding_args.add_argument('--small',
-        help=('does not show dependencies of conda or python ' +
-              'to make the tree easier to understand'),
+    hiding_cmds.add_argument(
+        '--exclude',
+        help='comma separated list of packages to exclude dependencies from tree, ' +
+        'can be specified multiple times',
+        default=[],
+        action='append'
+    )
+    hiding_cmds.add_argument('--small',
+        help="don't include dependencies for conda and python. alias for --exclude conda,python",
         default=False, action='store_true')
-    hiding_args.add_argument('--full',
-        help=('shows the complete dependency tree,' +
-              'with all the redundancies that it entails'),
+    hiding_cmds.add_argument('--full',
+        help='shows the complete dependency tree, ' +
+              'with all the redundancies that it entails',
         default=False, action='store_true')
-    hiding_args.add_argument('--dot',
-         help=('print a graphviz dot graph notation'), action='store_true', default=False)
 
     # Definining the simple subcommands
     lv_cmd = subparser.add_parser('leaves',
          help='shows leaf packages')
-    lv_cmd.add_argument('--export', help='export leaves dependencies',
-        action='store_true', default=False)
-    lv_cmd.add_argument('--with-cycles', help='include orphan cycles',
-        action='store_true', default=False)
+    lv_cmd.add_argument('--export',
+        help='export leaves dependencies',
+        default=False, action='store_true')
+    lv_cmd.add_argument('--with-cycles',
+        help='include orphan cycles',
+        default=False, action='store_true')
+    lv_cmd.add_argument('--json',
+        help='print packages in json format',
+        default=False, action="store_true")
 
     subparser.add_parser('cycles', help='shows dependency cycles')
 
@@ -237,7 +264,7 @@ def main():
         parents=[package_cmds, hiding_cmds])
     subparser.add_parser('deptree',
         help="shows the complete dependency tree",
-        parents=[hiding_cmds])
+        parents=[format_args, hiding_cmds])
     subparser.add_parser('unowned-files',
         help='shows files that are not owned by any package')
     subparser.add_parser('who-owns',
@@ -296,6 +323,16 @@ def main():
              'empty_cols': [], 'is_last': False, 'tree_exists': set(),
              'hidden_dependencies': False, 'pkgs_with_cycles': pkgs_with_cycles(g)}
 
+    if args.subcmd in ['depends','whoneeds','deptree']:
+        if len(args.exclude) > 0:
+            ex = []
+            for i in args.exclude:
+                for j in i.split(','):
+                    ex.append(j)
+            args.exclude = ex
+        if args.small:
+            args.exclude.extend(['conda','python'])
+
     if args.subcmd == 'cycles':
         print(get_cycles(g), end='')
 
@@ -306,23 +343,23 @@ def main():
         # The 'depends' subcommand corresponds to a down search.
         state["down_search"] = (args.subcmd == "depends")
         if args.package not in g:
-            print("warning: package \"%s\" not found"%(args.package), file=sys.stderr)
+            print(f"warning: package \"{args.package}\" not found", file=sys.stderr)
             sys.exit(1)
-        if args.recursive:
-            fn = networkx.descendants if state["down_search"] else networkx.ancestors
-            e = list(fn(g, args.package))
-            print(e)
-        elif args.tree:
-            tree, state = print_dep_tree(g, args.package, None, state)
-            print(tree, end='')
         elif args.dot:
             fn = networkx.descendants if state["down_search"] else networkx.ancestors
             e = list(fn(g, args.package))
             print_graph_dot(g.subgraph(e+[args.package]))
+        elif args.tree:
+            tree, state = print_dep_tree(g, args.package, None, state)
+            print(tree, end='')
+        elif args.recursive:
+            fn = networkx.descendants if state["down_search"] else networkx.ancestors
+            e = list(fn(g, args.package))
+            print_pkgs(e, with_json=args.json)
         else:
             edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
             e = [i[1] for i in edges] if state["down_search"] else [i[0] for i in edges]
-            print(e)
+            print_pkgs(e, with_json=args.json)
 
     elif args.subcmd == 'leaves':
         if args.with_cycles:
@@ -334,16 +371,19 @@ def main():
                 k = get_package_key(l, p)
                 print('%s::%s=%s=%s' % (l[k].channel.channel_name, l[k].name, l[k].version, l[k].build))
         else:
-            print(lv)
+            print_pkgs(lv, with_json=args.json)
 
     elif args.subcmd == 'deptree':
         if args.dot:
             print_graph_dot(g)
+        elif args.json:
+            print_pkgs(list(g), with_json=True)
         else:
             complete_tree = ""
             for pk in get_leaves_plus_cycles(g):
-                tree, state = print_dep_tree(g, pk, None, state)
-                complete_tree += tree
+                if pk not in args.exclude:
+                    tree, state = print_dep_tree(g, pk, None, state)
+                    complete_tree += tree
             print(''.join(complete_tree), end='')
 
     elif args.subcmd == 'unowned-files':
@@ -375,4 +415,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
