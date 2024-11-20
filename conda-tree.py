@@ -14,7 +14,7 @@ import conda.api
 import conda.base.context
 import networkx
 
-__version__ = '1.1.0'
+__version__ = '1.1.1'
 
 # The number of spaces
 TABSIZE = 3
@@ -38,10 +38,11 @@ def make_cache_graph(cache):
             g.add_edge(n, n2, version=v2)
     return(g)
 
-def print_graph_dot(g):
+def print_graph_dot(g, exclude_pkgs=set()):
     print("digraph {")
     for k,v in g.edges():
-       print(f"  \"{k}\" -> \"{v}\"")
+        if k not in exclude_pkgs and v not in exclude_pkgs:
+            print(f"  \"{k}\" -> \"{v}\"")
     print("}")
 
 def remove_from_graph(g, node, _cache=None):
@@ -175,8 +176,13 @@ def is_node_reachable(graph, source, target):
         for s in source:
             if is_node_reachable(graph, s, target):
                 return True
+        return False
     else:
-        return any(networkx.algorithms.simple_paths.all_simple_paths(graph, source, target))
+        try:
+            paths = networkx.shortest_path(graph, source, target)
+            return len(paths)>0
+        except:
+            return False
 
 def print_pkgs(pkgs, with_json=False):
     if with_json:
@@ -184,6 +190,21 @@ def print_pkgs(pkgs, with_json=False):
     else:
         for p in pkgs:
             print(p)
+
+def find_reachable_pkgs(graph, pkg, down_search=True, exclude_pkgs=set()):
+    if down_search:
+        paths = networkx.shortest_path(graph, source=pkg)
+    else:
+        paths = networkx.shortest_path(graph, target=pkg)
+
+    reachable_pkgs = []
+    for k, v in paths.items():
+        if len(exclude_pkgs.intersection(v)) > 0 and k not in exclude_pkgs:
+            pass # remove paths with excluded packages
+        elif k != pkg:
+            reachable_pkgs.append(k)
+
+    return reachable_pkgs
 
 def main():
     parser = argparse.ArgumentParser()
@@ -346,15 +367,13 @@ def main():
             print(f"warning: package \"{args.package}\" not found", file=sys.stderr)
             sys.exit(1)
         elif args.dot:
-            fn = networkx.descendants if state["down_search"] else networkx.ancestors
-            e = list(fn(g, args.package))
+            e = find_reachable_pkgs(g, args.package, exclude_pkgs=set(args.exclude), down_search=state["down_search"])
             print_graph_dot(g.subgraph(e+[args.package]))
         elif args.tree:
             tree, state = print_dep_tree(g, args.package, None, state)
             print(tree, end='')
         elif args.recursive:
-            fn = networkx.descendants if state["down_search"] else networkx.ancestors
-            e = list(fn(g, args.package))
+            e = find_reachable_pkgs(g, args.package, exclude_pkgs=set(args.exclude), down_search=state["down_search"])
             print_pkgs(e, with_json=args.json)
         else:
             edges = g.out_edges(args.package) if state["down_search"] else g.in_edges(args.package)
@@ -375,7 +394,7 @@ def main():
 
     elif args.subcmd == 'deptree':
         if args.dot:
-            print_graph_dot(g)
+            print_graph_dot(g, exclude_pkgs=set(args.exclude))
         elif args.json:
             print_pkgs(list(g), with_json=True)
         else:
