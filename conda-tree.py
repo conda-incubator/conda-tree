@@ -14,7 +14,7 @@ import conda.api
 import conda.base.context
 import networkx
 
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 
 # The number of spaces
 TABSIZE = 3
