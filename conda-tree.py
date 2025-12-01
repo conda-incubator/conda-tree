@@ -302,7 +302,7 @@ def main():
     if args.prefix is None:
         _conda = os.environ.get('CONDA_EXE', 'conda')
         _info = json.loads(subprocess.check_output(
-            [_conda, 'info', '-e', '--json']))
+            [_conda, 'info', '--json']))
         if args.name is None:
             if _info['active_prefix'] is not None:
                 args.prefix = _info['active_prefix']
